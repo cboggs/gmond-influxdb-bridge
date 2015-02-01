@@ -1,13 +1,15 @@
 #!/usr/bin/python
 
-from lxml import etree
-import time
 import json
+import time
 from influxdb import InfluxDBClient
+from io import StringIO, BytesIO
+from lxml import etree
 from telnetlib import Telnet
 
 t = Telnet()
 t.open("192.168.59.103", 8649)
+xml_data = StringIO(unicode(t.read_all()))
 xml_data = t.read_all()
 t.close()
 
@@ -19,9 +21,7 @@ payload = []
 metrics = set([])
 metrics_blacklist = set(["machine_type", "os_release", "gexec", "os_name"])
 
-#tree = etree.ElementTree(file='sample-data/gmond-dump.xml')
-tree = etree.ElementTree(xml_data)
-root_elem = tree.getroot()
+root_elem = etree.fromstring(xml_data)
 cluster_name = root_elem[0].attrib['NAME']
 
 for metric_elem in root_elem.findall(".//METRIC"):
@@ -42,8 +42,7 @@ for metric_name in metrics:
         metric_data['points'].append(points)
     payload.append(metric_data)
 
-#print json.dumps(payload)
-
 client = InfluxDBClient('192.168.59.103', 58086, 'root', 'root', 'test')
+#client.create_database('test')
 client.write_points(payload)
 
