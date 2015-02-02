@@ -6,5 +6,7 @@ RUN apt-get install -y python ganglia-monitor
 EXPOSE 8649
 
 ADD resources/gmond.conf /etc/ganglia/gmond.conf
+ADD resources/spin.sh /root/spin.sh
 
-#ENTRYPOINT ["/usr/sbin/gmond"]
+
+ENTRYPOINT ["/root/spin.sh"]
