@@ -17,7 +17,7 @@ RUN wget http://s3.amazonaws.com/influxdb/influxdb_latest_amd64.deb
 RUN sudo dpkg -i influxdb_latest_amd64.deb
 
 ADD resources/gmond.conf /etc/ganglia/gmond.conf
-ADD resources/grafana.conf /etc/apache2/sites-available/grafana.conf
+ADD resources/grafana.conf /etc/apache2/sites-available/000-default.conf
 ADD resources/grafana_config.js /var/www/grafana-1.9.1/config.js
 ADD resources/grafana_default_dashboard.json /var/www/grafana-1.9.1/app/dashboards/default.json
 ADD resources/spin.sh /root/spin.sh
