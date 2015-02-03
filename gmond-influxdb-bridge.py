@@ -81,15 +81,27 @@ def parse_metrics(xml_data, payload):
     for metric_name in metrics:
         metric_data = {'name': metric_name, 'columns': columns, 'points': [] }
         for metric_elem in root_elem.findall(".//METRIC[@NAME='{0}']".format(metric_name)):
-            metric_value = metric_elem.attrib['VAL']
             metric_type = metric_elem.attrib['TYPE']
+            metric_value = sanitize_metric(metric_elem.attrib['VAL'], metric_type)
             # findall() because I don't trust gmond to always report EXTRA_ELEMENTs in the same order
             group = next(metric_elem.iterfind("EXTRA_DATA/EXTRA_ELEMENT[@NAME='GROUP']")).attrib['VAL']
             host_name=metric_elem.getparent().attrib['NAME']
             points = [cluster_name, host_name, metric_value, group, epoch_time]
-            D (3, "host={0} : group={1} : metric_name={2} : metric_value={3}".format(host_name, group, metric_name, metric_value))
+            D (3, "host={0} : group={1} : metric_name={2} : metric_value={3} : metric_type={4} : val_class={5}".format(host_name, group, metric_name, metric_value, metric_type, metric_value.__class__.__name__))
             metric_data['points'].append(points)
         payload.append(metric_data)
+
+def sanitize_metric(value, datatype):
+    D (3, "sanitize_metric: datatype = {0}".format(datatype))
+    if datatype == "float" or datatype == "double":
+        D (3, "converting to float")
+        return float(value)
+    elif datatype == "uint16" or datatype == "uint32":
+        D (3, "converting to int")
+        return int(value)
+    else:
+        WARN ("non-number value detected, which is almost certainly a bug in gmond-influxdb-bridge - you should talk to github.com/cboggs")
+        return value
 
 def push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, create_db=False):
     D (1, "create_db: {0}".format(args.create_db))
@@ -129,10 +141,8 @@ else:
     db_pass = args.db_pass
     db_name = args.db_name
 
-epoch_time = int(time.time())
 columns = ["cluster", "hostname", "value", "group", "time"]
 metrics_blacklist = set(["machine_type", "os_release", "gexec", "os_name"])
-payload = []
 
 if args.timeout:
     timeout = args.timeout
@@ -140,18 +150,24 @@ else:
     timeout = 3
 
 INFO ("bridge starting up")
-D (1, "epoch time: {0}".format(epoch_time))
 D (1, "hosts: {0}".format(gmond_hosts))
 D (1, "blacklisted metrics: {0}".format(metrics_blacklist))
 D (1, "columns: {0}".format(columns))
 
-for host in gmond_hosts:
-    xml_data = get_xml_data(host, timeout)
-    if xml_data:
-        parse_metrics(xml_data, payload)
-    else:
-        WARN ("no data found on host {0}".format(host))
+while True:
+    epoch_time = int(time.time())
+    D (1, "epoch time: {0}".format(epoch_time))
+    payload = []
 
-if len(payload):
-    D (1, "pushing metrics to InfluxDB")
-    push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, args.create_db)
+    for host in gmond_hosts:
+        xml_data = get_xml_data(host, timeout)
+        if xml_data:
+            parse_metrics(xml_data, payload)
+        else:
+            WARN ("no data found on host {0}".format(host))
+
+    if len(payload):
+        D (1, "pushing metrics to InfluxDB")
+        push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, args.create_db)
+
+    time.sleep(float(args.interval))
