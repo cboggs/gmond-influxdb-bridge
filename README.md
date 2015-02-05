@@ -14,6 +14,7 @@ gmond system metrics + gmond plugins = Awesome
 This is my attempt to bridge two of my favorite Awesomes.
 
 ## Dependencies
+`sudo apt-get install libxml2-dev libxslt1-dev`
 `sudo pip install influxdb lxml`
 
 (Optional: an accessible Docker host)
