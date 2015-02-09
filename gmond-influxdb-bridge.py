@@ -170,4 +170,6 @@ while True:
         D (1, "pushing metrics to InfluxDB")
         push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, args.create_db)
 
+    D (1, "elapsed time: {0}\n".format(str(time.time() - epoch_time)))
+
     time.sleep(float(args.interval))
