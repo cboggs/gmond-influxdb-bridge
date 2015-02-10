@@ -13,14 +13,14 @@ argparser = argparse.ArgumentParser()
 
 argparser.add_argument('-d', '--debug', help="Set debug level - the higher the level, the further down the rabbit hole...")
 argparser.add_argument('-H', '--hosts', help="Comma-separated list of gmond hosts/IPs to poll")
-argparser.add_argument('-T', '--timeout', help="Connection timeout in seconds")
+argparser.add_argument('-I', '--interval', default=15, help="Polling interval in seconds")
+argparser.add_argument('-T', '--timeout', default=3, help="Connection timeout in seconds")
 argparser.add_argument('--db_host', help="InfluxDB hostname/IP")
 argparser.add_argument('--db_port', help="InfluxDB port")
 argparser.add_argument('--db_user', help="InfluxDB username")
 argparser.add_argument('--db_pass', help="InfluxDB password")
 argparser.add_argument('--db_name', help="InfluxDB database name")
 argparser.add_argument('--create_db', help="If db_name does not exist at db_host, create it (requires that db_user and db_pass be admin credentials)", action="store_true")
-argparser.add_argument('-I', '--interval', default=15, help="Polling interval in seconds")
 
 argparser.parse_args()
 args = argparser.parse_args()
@@ -143,11 +143,8 @@ else:
 
 columns = ["cluster", "hostname", "value", "group", "time"]
 metrics_blacklist = set(["machine_type", "os_release", "gexec", "os_name"])
-
-if args.timeout:
-    timeout = args.timeout
-else:
-    timeout = 3
+interval = float(args.interval)
+timeout = int(args.timeout)
 
 INFO ("bridge starting up")
 D (1, "hosts: {0}".format(gmond_hosts))
@@ -170,6 +167,14 @@ while True:
         D (1, "pushing metrics to InfluxDB")
         push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, args.create_db)
 
-    D (1, "elapsed time: {0}\n".format(str(time.time() - epoch_time)))
+    elapsed_time = int(time.time()) - epoch_time
+    D (1, "elapsed time: {0}s".format(str(elapsed_time)))
 
-    time.sleep(float(args.interval))
+    # adjust sleep time in an attempt to keep a consistent publish interval
+    # don't sleep at all if elapsed_time > interval to minimize loss of resolution
+    if elapsed_time < interval:
+        adjusted_sleep = interval - elapsed_time
+        D (1, "sleep time adjusted to {0}s".format(str(adjusted_sleep)))
+        time.sleep(adjusted_sleep)
+    else:
+        WARN ("elapsed time >= polling interval, skipping sleep (you may want to run multiple instances of gmond-influxdb-bridge, each polling fewer gmonds)\n")
