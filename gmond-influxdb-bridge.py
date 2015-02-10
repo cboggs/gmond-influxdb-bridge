@@ -20,7 +20,6 @@ argparser.add_argument('--db_port', help="InfluxDB port")
 argparser.add_argument('--db_user', help="InfluxDB username")
 argparser.add_argument('--db_pass', help="InfluxDB password")
 argparser.add_argument('--db_name', help="InfluxDB database name")
-argparser.add_argument('--create_db', help="If db_name does not exist at db_host, create it (requires that db_user and db_pass be admin credentials)", action="store_true")
 
 argparser.parse_args()
 args = argparser.parse_args()
@@ -103,21 +102,10 @@ def sanitize_metric(value, datatype):
         WARN ("non-number value detected, which is almost certainly a bug in gmond-influxdb-bridge - you should talk to github.com/cboggs")
         return value
 
-def push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, create_db=False):
-    D (1, "create_db: {0}".format(args.create_db))
+def push_metrics(db_host, db_port, db_user, db_pass, db_name, payload):
     D (1, "db_host={0} : db_port={1} : db_user={2} : db_pass={3} : db_name={4}".format(db_host, db_port, db_user, db_pass, db_name))
     client = influxdb.InfluxDBClient(db_host, db_port, db_user, db_pass, db_name)
 
-    if create_db:
-        try:
-            client.create_database(db_name)
-        except influxdb.client.InfluxDBClientError:
-            D (1, "db {0} already exists, skipping creation".format(db_name))
-        except:
-            ERR ("could not create database {0} - most likely you haven't provided admin credentials".format(db_name))
-        else:
-            INFO ("db {0} not found, creating".format(db_name))
-            INFO ("created user {0} in db {1}".format(db_user, db_name))
     try:
         client.write_points(payload, 's')
     except:
@@ -165,7 +153,7 @@ while True:
 
     if len(payload):
         D (1, "pushing metrics to InfluxDB")
-        push_metrics(db_host, db_port, db_user, db_pass, db_name, payload, args.create_db)
+        push_metrics(db_host, db_port, db_user, db_pass, db_name, payload)
 
     elapsed_time = int(time.time()) - epoch_time
     D (1, "elapsed time: {0}s".format(str(elapsed_time)))
