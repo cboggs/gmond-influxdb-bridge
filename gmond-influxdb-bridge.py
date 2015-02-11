@@ -3,6 +3,7 @@
 import argparse
 import influxdb
 import json
+import re
 import socket
 import time
 from lxml import etree
@@ -12,17 +13,14 @@ from telnetlib import Telnet
 argparser = argparse.ArgumentParser()
 
 argparser.add_argument('-d', '--debug', help="Set debug level - the higher the level, the further down the rabbit hole...")
-argparser.add_argument('-H', '--hosts', help="Comma-separated list of gmond hosts/IPs to poll")
-argparser.add_argument('-I', '--interval', default=15, help="Polling interval in seconds")
-argparser.add_argument('-T', '--timeout', default=3, help="Connection timeout in seconds")
-argparser.add_argument('--db_host', help="InfluxDB hostname/IP")
-argparser.add_argument('--db_port', help="InfluxDB port")
-argparser.add_argument('--db_user', help="InfluxDB username")
-argparser.add_argument('--db_pass', help="InfluxDB password")
-argparser.add_argument('--db_name', help="InfluxDB database name")
+argparser.add_argument('-f', '--config', help="Config file to load")
 
 argparser.parse_args()
 args = argparser.parse_args()
+
+if not args.config:
+    print "Could not load module 'telepathy'.\nPlease specify a configuration file via -f"
+    exit(1)
 
 def D(level, msg):
     if args.debug and int(args.debug) >= level:
@@ -36,6 +34,43 @@ def WARN(msg):
 
 def ERR(msg):
     print "ERROR :: {0}".format(msg)
+
+def ERREXIT(msg):
+    print "ERROR :: {0}".format(msg)
+    exit(1)
+
+def parse_config(config_filename):
+    # hat tip to riquetd for code to parse comments out of json config files
+    comment_re = re.compile(
+        '(^)?[^\S\n]*/(?:\*(.*?)\*/[^\S\n]*|/[^\n]*)($)?',
+        re.DOTALL | re.MULTILINE
+    )
+
+    try:
+        with open(config_filename) as f:
+            content = ''.join(f.readlines())
+            match = comment_re.search(content)
+            while match:
+                content = content[:match.start()] + content[match.end():]
+                match = comment_re.search(content)
+
+            print content
+            config_data = json.loads(content)
+            f.close()
+
+    except ValueError as e:
+        ERR ("Failed to load config, invalid JSON:")
+        ERREXIT ("  {0}".format(e))
+
+    for val in ['hosts', 'db']:
+        if not val in config_data:
+            ERREXIT ("missing '{0}' config value - exiting.".format(val))
+    
+    for val in ['host', 'port', 'name', 'user', 'pass']:
+        if not val in config_data['db']:
+            ERREXIT ("missing db['{0}'] config value - exiting.".format(val))
+            
+    return config_data
 
 def get_xml_data(hostname, timeout):
     xml_data = None
@@ -112,32 +147,23 @@ def push_metrics(db_host, db_port, db_user, db_pass, db_name, payload):
         ERR ("could not write data points to InfluxDB")
     else:
         D (1, "successfully wrote data points to InfluxDB")
-    
-if args.hosts:
-    gmond_hosts = args.hosts.split(',')
-else:
-    ERR ("--hosts is required.")
-    exit(1)
 
-if not (args.db_host and args.db_port and args.db_user and args.db_pass and args.db_name):
-    ERR ("ALL InfluxDB args are required - please consult {0} --help".format(path.basename(__file__)))
-    exit(1)
-else:
-    db_host = args.db_host
-    db_port = args.db_port
-    db_user = args.db_user
-    db_pass = args.db_pass
-    db_name = args.db_name
+config = parse_config(args.config)
 
-columns = ["cluster", "hostname", "value", "group", "time"]
-metrics_blacklist = set(["machine_type", "os_release", "gexec", "os_name"])
-interval = float(args.interval)
-timeout = int(args.timeout)
+gmond_hosts = config['hosts']
+metrics_blacklist = set(config['metrics_blacklist'])
+columns = config['columns']
+interval = config['interval']
+timeout = config['timeout']
+db = config['db']
 
 INFO ("bridge starting up")
-D (1, "hosts: {0}".format(gmond_hosts))
-D (1, "blacklisted metrics: {0}".format(metrics_blacklist))
+D (1, "gmond_hosts: {0}".format(gmond_hosts))
+D (1, "metrics_blacklist: {0}".format(metrics_blacklist))
 D (1, "columns: {0}".format(columns))
+D (1, "interval: {0}".format(interval))
+D (1, "timeout: {0}".format(timeout))
+D (1, "db connection: http://{0}:{1}/db/{2}/series?u={3}&p={4}".format(db['host'], db['port'], db['name'], db['user'], db['pass']))
 
 while True:
     epoch_time = int(time.time())
@@ -153,7 +179,7 @@ while True:
 
     if len(payload):
         D (1, "pushing metrics to InfluxDB")
-        push_metrics(db_host, db_port, db_user, db_pass, db_name, payload)
+        push_metrics(db['host'], db['port'], db['user'], db['pass'], db['name'], payload)
 
     elapsed_time = int(time.time()) - epoch_time
     D (1, "elapsed time: {0}s".format(str(elapsed_time)))
