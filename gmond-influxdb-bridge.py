@@ -53,8 +53,6 @@ def parse_config(config_filename):
             while match:
                 content = content[:match.start()] + content[match.end():]
                 match = comment_re.search(content)
-
-            print content
             config_data = json.loads(content)
             f.close()
 
@@ -72,14 +70,20 @@ def parse_config(config_filename):
             
     return config_data
 
-def get_xml_data(hostname, timeout):
+def get_xml_data(hostname, timeout, node_failures, node_failure_threshold):
     xml_data = None
 
     try:
         t = Telnet()
         t.open(hostname, 8649, timeout)
     except socket.timeout:
-        ERR ("timeout connecting to host {0}".format(hostname))
+        # currently only incrementing failure count for nodes that time out.
+        # the other failures happen quickly enough to have little to no impact
+        #  on total elapsed time, and thus aren't worthy worrying about
+        ERR ("timeout connecting to host {0}. recording failure".format(hostname))
+        node_failures[hostname] += 1
+        WARN ("host {0} has failed {1} times - {2} more failures before removal from host list".format(hostname, node_failures[hostname], node_failure_threshold - node_failures[hostname]))
+        return "node_failed"
     except socket.gaierror:
         ERR ("host not found: {0}".format(hostname))
     except socket.error:
@@ -150,11 +154,12 @@ def push_metrics(db_host, db_port, db_user, db_pass, db_name, payload):
 
 config = parse_config(args.config)
 
-gmond_hosts = config['hosts']
+gmond_hosts = set(config['hosts'])
 metrics_blacklist = set(config['metrics_blacklist'])
 columns = config['columns']
 interval = config['interval']
 timeout = config['timeout']
+node_failure_threshold = config['node_failure_threshold']
 db = config['db']
 
 INFO ("bridge starting up")
@@ -165,17 +170,29 @@ D (1, "interval: {0}".format(interval))
 D (1, "timeout: {0}".format(timeout))
 D (1, "db connection: http://{0}:{1}/db/{2}/series?u={3}&p={4}".format(db['host'], db['port'], db['name'], db['user'], db['pass']))
 
+node_failures = {}
+for host in gmond_hosts:
+    node_failures[host] = 0
+
 while True:
     epoch_time = int(time.time())
     D (1, "epoch time: {0}".format(epoch_time))
     payload = []
+    nodes_to_remove = []
 
     for host in gmond_hosts:
-        xml_data = get_xml_data(host, timeout)
-        if xml_data:
+        xml_data = get_xml_data(host, timeout, node_failures, node_failure_threshold)
+        if xml_data and xml_data != 'node_failed':
             parse_metrics(xml_data, payload)
-        else:
+        elif not xml_data:
             WARN ("no data found on host {0}".format(host))
+        elif xml_data == 'node_failed' and node_failures[host] >= node_failure_threshold:
+            WARN ("marking host {0} for removal".format(host))
+            nodes_to_remove.append(host)
+
+    for host in nodes_to_remove:
+        WARN ("removed host {0} due to excessive failures".format(host))
+        gmond_hosts.remove(host)
 
     if len(payload):
         D (1, "pushing metrics to InfluxDB")

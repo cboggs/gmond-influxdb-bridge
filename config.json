@@ -1,7 +1,7 @@
 {
-    "hosts": ["bld-dev-01", "bld-dev-02"],
-    "interval": 15,
-    "timeout": 3,
+    "hosts": ["192.168.2.155", "bld-dev-01", "bld-dev-02"],
+    "interval": 3,
+    "timeout": 1,
     "db": {
         "host": "bld-dev-02",
         "port": 8086,
@@ -10,5 +10,8 @@
         "pass": "root"
     },
     "columns": ["cluster", "hostname", "value", "group", "time"],
-    "metrics_blacklist": ["machine_type", "os_release", "gexec", "os_name"]
+    "metrics_blacklist": ["machine_type", "os_release", "gexec", "os_name"],
+    // nodes that timeout more than node_failure_threshold times will be
+    //  from hosts until restart
+    "node_failure_threshold": 3
 }
