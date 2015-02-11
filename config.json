@@ -6,8 +6,8 @@
         "host": "bld-dev-02",
         "port": 8086,
         "name": "test",
-        "user": "test",
-        "pass": "test"
+        "user": "root",
+        "pass": "root"
     },
     "columns": ["cluster", "hostname", "value", "group", "time"],
     "metrics_blacklist": ["machine_type", "os_release", "gexec", "os_name"]
