@@ -23,8 +23,8 @@ This is my attempt to bridge two of my favorite Awesomes.
 If you have a Docker host handy:
 ```
 scripts/build.sh && scripts/run.sh
-./gmond-influxdb-bridge.py -H your_docker_host --db_host your-docker_host \
-  --db_port 58086 --db_user root --db_pass root --db_name test --create_db -I 15
+vim config.json #Edit as appropriate
+./gmond-influxdb-bridge.py -f config.json
 ```
 
 Then just navigate to your_docker_host:5080 in your favorite browser and voila!
@@ -35,7 +35,6 @@ This tool works fine when pointed at multiple hosts whose gmond instances each c
 I've not yet tested a single instance of gmond-influxdb-bridge pointing at multiple gmond collector hosts to collect multi-cluster-wide metrics. Should you try it and find it lacking, you can run multiple instances of gmond-influxdb-bridge as a workaround (for now).
 
 ## What's Still to Come
-- Read a config file
 - Allow custom ports per host
 - Test multi-cluster-wide collection via gmond collector hosts (will add option for this in Docker scripts)
 - Use standard socket library instead of telnet (slow-brain moment led me to libtelnet... I don't try to understand why)
