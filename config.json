@@ -12,6 +12,6 @@
     "columns": ["cluster", "hostname", "value", "group", "time"],
     "metrics_blacklist": ["machine_type", "os_release", "gexec", "os_name"],
     // nodes that timeout more than node_failure_threshold times will be
-    //  from hosts until restart
+    // removed from hosts list until restart
     "node_failure_threshold": 3
 }
